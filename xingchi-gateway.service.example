@@ -1,0 +1,16 @@
+[Unit]
+Description=xingchi-gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Salin folder project, bukan hanya gateway.py plus paket xingchi_gateway.
+WorkingDirectory=/opt/xingchi-gateway
+EnvironmentFile=/opt/xingchi-gateway/.env
+ExecStart=/usr/bin/python3 /opt/xingchi-gateway/gateway.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
