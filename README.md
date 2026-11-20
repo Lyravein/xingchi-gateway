@@ -101,3 +101,7 @@ terakhir.
   `instructions`. Itu tidak bisa dihilangkan dari sisi akun, tetapi gateway selalu
   membuang `instructions` sebelum mengirim respons ke client.
 - Jangan commit `.env`; file itu sudah dikecualikan lewat `.gitignore`.
+
+## Lisensi
+
+MIT, lihat berkas [LICENSE](LICENSE).
