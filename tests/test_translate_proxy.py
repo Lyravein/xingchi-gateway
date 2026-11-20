@@ -1,233 +1,21 @@
+"""Tes terjemahan Chat/Responses dan proxy dasar (tes 1..10)."""
+
 import http.client
 import json
-import os
 import threading
-import unittest
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from xingchi_gateway.config import DEFAULT_USER_AGENT, create_config
+from xingchi_gateway.translate import DEFAULT_INSTRUCTIONS
 from xingchi_gateway.server import create_server
 
-
-UPSTREAM_KEY = "test-key-bukan-asli"
-GATEWAY_KEY = "gateway-test-key-bukan-asli"
-
-
-class FakeUpstreamHandler(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
-
-    def log_message(self, format, *args):
-        return
-
-    def read_body(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length:
-            return self.rfile.read(length)
-        return b""
-
-    def send_body(self, status, body, content_type="application/json"):
-        self.close_connection = True
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Connection", "close")
-        self.end_headers()
-        if body:
-            self.wfile.write(body)
-
-    def do_GET(self):
-        body = self.read_body()
-        self.server.requests.append(
-            {
-                "method": "GET",
-                "path": self.path,
-                "headers": dict(self.headers.items()),
-                "body": body,
-            }
-        )
-        if self.path == "/v1/models":
-            status = self.server.fixture["models_status"]
-            payload = self.server.fixture["models_payload"]
-            encoded = json.dumps(payload).encode("utf-8")
-            self.send_body(status, encoded)
-            return
-        self.send_body(404, b'{"error":{"message":"Not Found"}}')
-
-    def do_POST(self):
-        body = self.read_body()
-        self.server.requests.append(
-            {
-                "method": "POST",
-                "path": self.path,
-                "headers": dict(self.headers.items()),
-                "body": body,
-            }
-        )
-        if self.path != "/v1/responses":
-            self.send_body(
-                404,
-                b'{"error":{"message":"Not Found","code":"not_found"}}',
-            )
-            return
-
-        status = self.server.fixture["responses_status"]
-        content_type = self.server.fixture["responses_content_type"]
-        payload = self.server.fixture["responses_payload"]
-        if content_type == "text/event-stream":
-            event_lines = []
-            for event in self.server.fixture["responses_events"]:
-                event_lines.append("event: " + event["type"])
-                event_lines.append(
-                    "data: "
-                    + json.dumps(
-                        event["data"], ensure_ascii=False, separators=(",", ":")
-                    )
-                )
-                event_lines.append("")
-            event_lines.append("data: [DONE]")
-            event_lines.append("")
-            encoded = ("\n".join(event_lines)).encode("utf-8")
-            self.send_body(status, encoded, content_type)
-            return
-
-        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_body(status, encoded, content_type)
+from .helpers import (
+    GATEWAY_KEY,
+    UPSTREAM_KEY,
+    GatewayTestCase,
+)
 
 
-class GatewayTestCase(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.upstream = ThreadingHTTPServer(
-            ("127.0.0.1", 0), FakeUpstreamHandler
-        )
-        cls.upstream.daemon_threads = True
-        cls.upstream.requests = []
-        cls.upstream.fixture = {
-            "models_status": 200,
-            "models_payload": {
-                "object": "list",
-                "data": [
-                    {
-                        "id": "gpt-6.1-sol",
-                        "object": "model",
-                        "owned_by": "xingchi",
-                    }
-                ],
-            },
-            "responses_status": 200,
-            "responses_content_type": "application/json",
-            "responses_payload": {},
-            "responses_events": [],
-        }
-        cls.upstream_thread = threading.Thread(
-            target=cls.upstream.serve_forever, daemon=True
-        )
-        cls.upstream_thread.start()
-
-        upstream_host, upstream_port = cls.upstream.server_address
-        cls.base_url = f"http://{upstream_host}:{upstream_port}"
-        cls.config = create_config(
-            api_key=UPSTREAM_KEY,
-            base_url=cls.base_url,
-            user_agent=DEFAULT_USER_AGENT,
-            host="127.0.0.1",
-            port=8789,
-            upstream_timeout=2.0,
-            gateway_api_key=GATEWAY_KEY,
-        )
-        cls.gateway_server = create_server(cls.config, port=0)
-        cls.gateway_thread = threading.Thread(
-            target=cls.gateway_server.serve_forever, daemon=True
-        )
-        cls.gateway_thread.start()
-        cls.gateway_port = cls.gateway_server.server_address[1]
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.gateway_server.shutdown()
-        cls.gateway_server.server_close()
-        cls.upstream.shutdown()
-        cls.upstream.server_close()
-        cls.gateway_thread.join(timeout=2)
-        cls.upstream_thread.join(timeout=2)
-
-    def setUp(self):
-        self.upstream.requests.clear()
-        self.upstream.fixture.update(
-            {
-                "models_status": 200,
-                "models_payload": {
-                    "object": "list",
-                    "data": [
-                        {
-                            "id": "gpt-6.1-sol",
-                            "object": "model",
-                            "owned_by": "xingchi",
-                        }
-                    ],
-                },
-                "responses_status": 200,
-                "responses_content_type": "application/json",
-                "responses_payload": {},
-                "responses_events": [],
-            }
-        )
-
-    def request(
-        self,
-        method,
-        path,
-        body=None,
-        gateway_key=GATEWAY_KEY,
-    ):
-        connection = http.client.HTTPConnection(
-            "127.0.0.1", self.gateway_port, timeout=3
-        )
-        headers = {}
-        if gateway_key is not None:
-            headers["Authorization"] = f"Bearer {gateway_key}"
-        if body is not None:
-            if isinstance(body, (dict, list)):
-                body = json.dumps(body, ensure_ascii=False).encode("utf-8")
-            elif isinstance(body, str):
-                body = body.encode("utf-8")
-            headers["Content-Type"] = "application/json"
-        connection.request(method, path, body=body, headers=headers)
-        response = connection.getresponse()
-        status = response.status
-        content_type = response.getheader("Content-Type", "")
-        response_body = response.read()
-        connection.close()
-        return status, content_type, response_body
-
-    def post_chat(self, payload, gateway_key=GATEWAY_KEY):
-        return self.request(
-            "POST", "/v1/chat/completions", payload, gateway_key=gateway_key
-        )
-
-    def parse_json(self, body):
-        return json.loads(body.decode("utf-8"))
-
-    def parse_sse(self, body):
-        chunks = []
-        done = False
-        for block in body.decode("utf-8").split("\n\n"):
-            if not block:
-                continue
-            data_lines = [
-                line[len("data: "):]
-                for line in block.splitlines()
-                if line.startswith("data:")
-            ]
-            if not data_lines:
-                continue
-            data = "\n".join(data_lines)
-            if data == "[DONE]":
-                done = True
-            else:
-                chunks.append(json.loads(data))
-        return chunks, done
-
+class TranslateProxyTests(GatewayTestCase):
     def test_1_chat_request_translation(self):
         chat_request = {
             "model": "gpt-6.1-sol",
@@ -688,7 +476,6 @@ class GatewayTestCase(unittest.TestCase):
             fallback_server.server_close()
             fallback_thread.join(timeout=2)
 
-
     def test_9_non_string_upstream_error_code_is_dropped(self):
         self.upstream.fixture["responses_status"] = 422
         self.upstream.fixture["responses_payload"] = {
@@ -715,6 +502,32 @@ class GatewayTestCase(unittest.TestCase):
             or isinstance(payload["error"]["code"], str)
         )
 
+    def test_10_default_instructions_without_system_message(self):
+        self.upstream.fixture["responses_payload"] = {
+            "id": "resp_no_system",
+            "output": [],
+            "usage": {},
+        }
+        status, _, _ = self.post_chat(
+            {"model": "gpt-6.1-sol", "messages": [{"role": "user", "content": "Halo"}]}
+        )
+        self.assertEqual(status, 200)
+        translated = json.loads(
+            self.upstream.requests[-1]["body"].decode("utf-8")
+        )
+        self.assertEqual(translated["instructions"], DEFAULT_INSTRUCTIONS)
+        self.assertEqual(translated["instructions"], "You are a helpful assistant.")
 
-if __name__ == "__main__":
-    unittest.main()
+        self.post_chat(
+            {
+                "model": "gpt-6.1-sol",
+                "messages": [
+                    {"role": "system", "content": "Aturan khusus"},
+                    {"role": "user", "content": "Halo"},
+                ],
+            }
+        )
+        translated = json.loads(
+            self.upstream.requests[-1]["body"].decode("utf-8")
+        )
+        self.assertEqual(translated["instructions"], "Aturan khusus")

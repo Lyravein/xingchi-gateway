@@ -33,9 +33,10 @@ class UpstreamFailure(Exception):
     error_type: str = "upstream_error"
 
 
-def upstream_headers(config: GatewayConfig) -> dict:
+def upstream_headers(config: GatewayConfig, api_key: str | None = None) -> dict:
+    secret = config.api_key if api_key is None else api_key
     return {
-        "Authorization": f"Bearer {config.api_key}",
+        "Authorization": f"Bearer {secret}",
         "Content-Type": "application/json",
         "User-Agent": config.user_agent,
     }
@@ -50,11 +51,12 @@ def open_upstream(
     method: str,
     path: str,
     body: bytes | None = None,
+    api_key: str | None = None,
 ):
     request = urllib.request.Request(
         upstream_url(config, path),
         data=body,
-        headers=upstream_headers(config),
+        headers=upstream_headers(config, api_key),
         method=method,
     )
     return urllib.request.urlopen(request, timeout=config.upstream_timeout)
@@ -118,10 +120,11 @@ def request_upstream(
     method: str,
     path: str,
     body: bytes | None = None,
+    api_key: str | None = None,
 ):
     """Buka respons upstream; HTTPError/putus jaringan jadi UpstreamFailure."""
     try:
-        return open_upstream(config, method, path, body)
+        return open_upstream(config, method, path, body, api_key)
     except urllib.error.HTTPError as exc:
         message, code = parse_error_body(_read_http_error(exc))
         raise UpstreamFailure(exc.code, code, message) from None

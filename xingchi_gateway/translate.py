@@ -10,6 +10,8 @@ import json
 
 from .config import DEFAULT_MODEL
 
+DEFAULT_INSTRUCTIONS = "You are a helpful assistant."
+
 
 def strip_instructions(value):
     if isinstance(value, dict):
@@ -162,8 +164,9 @@ def translate_chat_request(body: dict) -> dict:
         "model": body.get("model") or DEFAULT_MODEL,
         "input": input_items,
     }
-    if instruction_parts:
-        responses_body["instructions"] = "\n\n".join(instruction_parts)
+    responses_body["instructions"] = (
+        "\n\n".join(instruction_parts) if instruction_parts else DEFAULT_INSTRUCTIONS
+    )
 
     if "max_completion_tokens" in body:
         responses_body["max_output_tokens"] = body["max_completion_tokens"]

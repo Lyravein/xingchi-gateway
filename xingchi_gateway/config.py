@@ -12,7 +12,8 @@ from dataclasses import dataclass
 DEFAULT_BASE_URL = "https://api.xingchiapi.com"
 DEFAULT_USER_AGENT = "codex_cli_rs/0.77.0"
 DEFAULT_MODEL = "gpt-6.1-sol"
-
+DEFAULT_DEBUG_MAX_BODY = 262144
+_TRUE_VALUES = {"1", "true", "yes"}
 
 @dataclass(frozen=True)
 class GatewayConfig:
@@ -23,6 +24,12 @@ class GatewayConfig:
     port: int = 8789
     upstream_timeout: float = 300.0
     gateway_api_key: str = ""
+    keys_file: str = "keys.json"
+    admin_token: str = ""
+    debug_dump: bool = False
+    debug_dir: str = ""
+    debug_max_body: int = DEFAULT_DEBUG_MAX_BODY
+    stats_file: str = ""
 
 
 def load_dotenv(path: str = ".env") -> None:
@@ -65,6 +72,39 @@ def _normalize_base_url(value: str) -> str:
 def _normalize_user_agent(value: str) -> str:
     return value or DEFAULT_USER_AGENT
 
+def _sibling_path(keys_file: str, name: str) -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(keys_file)), name)
+
+def _resolve_debug_dir(value: str | None, keys_file: str) -> str:
+    if value is None:
+        value = os.environ.get("GATEWAY_DEBUG_DIR", "")
+    return value.strip() or _sibling_path(keys_file, "debug")
+
+def _resolve_stats_file(value: str | None, keys_file: str) -> str:
+    if value is None:
+        value = os.environ.get("GATEWAY_STATS_FILE", "")
+    value = value.strip()
+    if not value:
+        return _sibling_path(keys_file, "stats.jsonl")
+    return "" if value.lower() == "off" else value
+
+def _env_flag(explicit: bool | None, name: str) -> bool:
+    if explicit is not None:
+        return bool(explicit)
+    return os.environ.get(name, "").strip().lower() in _TRUE_VALUES
+
+def _env_positive_int(explicit, name: str, default: int) -> int:
+    raw = explicit if explicit is not None else os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be greater than zero")
+    return value
+
 
 def config_from_env() -> GatewayConfig:
     api_key = os.environ.get("XINGCHI_API_KEY", "")
@@ -95,6 +135,8 @@ def config_from_env() -> GatewayConfig:
     _validate_timeout(upstream_timeout)
 
     gateway_api_key = os.environ.get("GATEWAY_API_KEY", "").strip()
+    keys_file = os.environ.get("GATEWAY_KEYS_FILE", "keys.json").strip() or "keys.json"
+    admin_token = os.environ.get("GATEWAY_ADMIN_TOKEN", "").strip()
 
     return GatewayConfig(
         api_key=api_key,
@@ -104,6 +146,14 @@ def config_from_env() -> GatewayConfig:
         port=port,
         upstream_timeout=upstream_timeout,
         gateway_api_key=gateway_api_key,
+        keys_file=keys_file,
+        admin_token=admin_token,
+        debug_dump=_env_flag(None, "GATEWAY_DEBUG_DUMP"),
+        debug_dir=_resolve_debug_dir(None, keys_file),
+        debug_max_body=_env_positive_int(
+            None, "GATEWAY_DEBUG_MAX_BODY", DEFAULT_DEBUG_MAX_BODY
+        ),
+        stats_file=_resolve_stats_file(None, keys_file),
     )
 
 
@@ -143,11 +193,23 @@ def create_config(
     port: int | None = None,
     upstream_timeout: float | None = None,
     gateway_api_key: str | None = None,
+    keys_file: str | None = None,
+    admin_token: str | None = None,
+    debug_dump: bool | None = None,
+    debug_dir: str | None = None,
+    debug_max_body: int | None = None,
+    stats_file: str | None = None,
 ) -> GatewayConfig:
     env_api_key = os.environ.get("XINGCHI_API_KEY", "")
     resolved_api_key = env_api_key if api_key is None else api_key
     if not resolved_api_key or not resolved_api_key.strip():
         raise ValueError("XINGCHI_API_KEY is required")
+
+    resolved_keys_file = (
+        os.environ.get("GATEWAY_KEYS_FILE", "keys.json").strip() or "keys.json"
+        if keys_file is None
+        else keys_file.strip() or "keys.json"
+    )
 
     return GatewayConfig(
         api_key=resolved_api_key,
@@ -168,4 +230,16 @@ def create_config(
             if gateway_api_key is None
             else gateway_api_key.strip()
         ),
+        keys_file=resolved_keys_file,
+        admin_token=(
+            os.environ.get("GATEWAY_ADMIN_TOKEN", "").strip()
+            if admin_token is None
+            else admin_token.strip()
+        ),
+        debug_dump=_env_flag(debug_dump, "GATEWAY_DEBUG_DUMP"),
+        debug_dir=_resolve_debug_dir(debug_dir, resolved_keys_file),
+        debug_max_body=_env_positive_int(
+            debug_max_body, "GATEWAY_DEBUG_MAX_BODY", DEFAULT_DEBUG_MAX_BODY
+        ),
+        stats_file=_resolve_stats_file(stats_file, resolved_keys_file),
     )

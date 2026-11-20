@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>xingchi-gateway admin</title>
+<style>
+:root{color-scheme:dark;--bg:#0d1117;--card:#171e28;--border:#2a3442;--text:#e6edf3;--muted:#8b98a9;--accent:#3b82f6;--danger:#b42318;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;padding:32px 20px;background:var(--bg);color:var(--text)}
+main{max-width:880px;margin:0 auto}
+header{margin-bottom:24px}
+h1{margin:0;font-size:24px;letter-spacing:-.01em}
+h2{margin:0 0 14px;font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.sub{margin:4px 0 0;color:var(--muted);font-size:13px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin:0 0 16px;box-shadow:0 1px 2px rgba(0,0,0,.4)}
+form{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px;flex:1 1 180px;min-width:0}
+label{font-size:12px;color:var(--muted)}
+input,select{width:100%;padding:9px 11px;background:#0d131b;color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px}
+input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.28)}
+button{padding:9px 16px;border:1px solid var(--border);border-radius:8px;background:#1e2937;color:var(--text);font-size:14px;cursor:pointer;transition:background .15s,border-color .15s}
+button:hover{background:#26364a;border-color:#3a4a5e}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover{background:#2f74e8;border-color:#2f74e8}
+button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+button.danger:hover{background:#9a1c13;border-color:#9a1c13}
+.group{border:1px solid var(--border);border-radius:10px;padding:14px;margin:0 0 12px;background:#131a24}
+.group:last-child{margin-bottom:0}
+.grouphead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px}
+.grouphead b{font-size:15px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.name{color:var(--muted);font-size:13px}
+.badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);background:#1b2431;color:#9fb2c9;text-transform:lowercase}
+.grouphead button{margin-left:auto;padding:5px 10px;font-size:12px}
+.keys{display:flex;flex-wrap:wrap;gap:8px}
+.key{display:inline-flex;align-items:center;gap:8px;padding:5px 6px 5px 10px;border:1px solid var(--border);border-radius:8px;background:#0f151e;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#c6d2e0}
+.key button{padding:3px 8px;font-size:11px;background:transparent;color:var(--muted);border-color:transparent}
+.key button:hover{background:#1e2937;border-color:var(--border);color:var(--text)}
+#result,#groupResult{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#9fb2c9;margin:14px 0 0}
+#result:empty,#groupResult:empty{display:none}
+#usage .name{color:var(--muted);font-size:13px;margin:0}
+#usage table{width:100%;border-collapse:collapse;font-size:12px;margin:0 0 14px}
+#usage th,#usage td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+#usage th{color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+#usage td.num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+#usage .err{color:#f97066}
+</style></head><body>
+<main>
+<header><h1>xingchi-gateway</h1><p class="sub">admin · kelola grup dan key upstream</p></header>
+<div class="card" id="login">
+<form id="loginForm" onsubmit="return false">
+<div class="field"><label for="token">Admin token</label>
+<input id="token" type="password" placeholder="Admin token" autocomplete="current-password"></div>
+<button id="loginBtn" class="primary" type="button">Buka admin</button>
+</form></div>
+<div id="app" hidden>
+<div class="card"><h2>Buat grup</h2><form id="groupForm">
+<div class="field"><label for="gSlug">Slug</label>
+<input id="gSlug" name="slug" placeholder="gpt" pattern="[a-z0-9-]{1,32}" required></div>
+<div class="field"><label for="gName">Nama</label>
+<input id="gName" name="name" placeholder="GPT Publik" required></div>
+<div class="field"><label for="gProtocol">Protokol</label>
+<select id="gProtocol" name="protocol"><option>responses</option><option>messages</option><option>chat</option></select></div>
+<button class="primary" type="submit">Buat</button></form><pre id="groupResult"></pre></div>
+<div class="card"><h2>Tambah key</h2><form id="keyForm">
+<div class="field"><label for="keySlug">Grup</label>
+<select name="slug" id="keySlug" required></select></div>
+<div class="field"><label for="keySecret">Secret key</label>
+<input id="keySecret" name="secret" type="password" placeholder="Secret key" required autocomplete="off"></div>
+<div class="field"><label for="keyLabel">Label</label>
+<input id="keyLabel" name="label" placeholder="utama"></div>
+<div class="field"><label for="keyProtocol">Protokol</label>
+<select id="keyProtocol" name="protocol"><option value="">Deteksi otomatis</option><option>responses</option><option>messages</option><option>chat</option></select></div>
+<button class="primary" type="submit">Tambah</button></form><pre id="result"></pre></div>
+<div class="card"><h2>Grup</h2><div id="groups"></div></div>
+<div class="card"><h2>Usage</h2><div id="usage"></div></div>
+</div>
+</main>
+<script>
+let token=sessionStorage.getItem("xingchiAdminToken")||"";
+const tokenInput=document.querySelector("#token");
+async function api(path,options={}){options.headers=Object.assign({"Authorization":"Bearer "+token,"Content-Type":"application/json"},options.headers||{});const r=await fetch(path,options);const b=await r.json();if(!r.ok)throw new Error(b.error&&b.error.message||"Request gagal");return b}
+async function load(){const b=await api("/admin/api/groups");const groups=b.groups||[];const box=document.querySelector("#groups");box.textContent="";const select=document.querySelector("#keySlug");select.textContent="";
+groups.forEach(g=>{const o=document.createElement("option");o.value=g.slug;o.textContent=g.slug+" - "+g.name;select.append(o);const d=document.createElement("div");d.className="group";const head=document.createElement("div");head.className="grouphead";head.innerHTML="<b>"+esc(g.slug)+"</b><span class='name'>"+esc(g.name)+"</span><span class='badge'>"+esc(g.protocol)+"</span>";const rg=document.createElement("button");rg.textContent="Hapus grup";rg.className="danger";rg.onclick=()=>removeGroup(g.slug);head.append(rg);d.append(head);
+const keysBox=document.createElement("div");keysBox.className="keys";
+(g.keys||[]).forEach(k=>{const s=document.createElement("span");s.className="key";s.append(document.createTextNode((k.label||k.id)+" · …"+k.last4));const rb=document.createElement("button");rb.textContent="Hapus";rb.onclick=()=>removeKey(g.slug,k.id);s.append(rb);keysBox.append(s)});if(!keysBox.childNodes.length){const empty=document.createElement("span");empty.className="name";empty.textContent="Belum ada key.";keysBox.append(empty)}d.append(keysBox);box.append(d)});loadStats()}
+function esc(s){const e=document.createElement("span");e.textContent=s==null?"":String(s);return e.innerHTML}
+function cell(text,cls){const td=document.createElement("td");td.textContent=text==null?"":String(text);if(cls)td.className=cls;return td}
+function tableRow(cells){const tr=document.createElement("tr");cells.forEach(c=>tr.append(c));return tr}
+function statsTable(headers,rows,emptyText){const t=document.createElement("table");const head=document.createElement("tr");headers.forEach(h=>{const th=document.createElement("th");th.textContent=h;head.append(th)});t.append(head);if(!rows.length){const td=document.createElement("td");td.colSpan=headers.length;td.className="name";td.textContent=emptyText;const tr=document.createElement("tr");tr.append(td);t.append(tr)}rows.forEach(r=>t.append(tableRow(r)));return t}
+function tokenCell(v){return cell(v==null?"-":v,"num")}
+function statusCell(v){return cell(v==null?"-":v,"num"+(typeof v==="number"&&v>=400?" err":""))}
+async function loadStats(){const box=document.querySelector("#usage");box.textContent="";try{const b=await api("/admin/api/stats");if(b.enabled===false){const p=document.createElement("p");p.className="name";p.textContent="Statistik usage dimatikan (GATEWAY_STATS_FILE=off).";box.append(p);return}
+const groups=(b.today&&b.today.groups)||{};const rows=Object.keys(groups).sort().map(s=>{const g=groups[s];return [cell(s),cell(g.count,"num"),statusCell(g.errors),tokenCell(g.prompt_tokens),tokenCell(g.completion_tokens)]});box.append(statsTable(["Grup","Request","Error","Token masuk","Token keluar"],rows,"Belum ada usage hari ini."));
+const label=document.createElement("p");label.className="sub";label.textContent="10 request terakhir";box.append(label);
+const recent=(b.recent||[]).slice(0,10).map(r=>[cell(r.ts),cell(r.group),cell(r.model),tokenCell(r.prompt_tokens),tokenCell(r.completion_tokens),statusCell(r.status),cell(r.duration_ms==null?"-":r.duration_ms+" ms","num")]);box.append(statsTable(["Waktu","Grup","Model","Masuk","Keluar","Status","Durasi"],recent,"Belum ada catatan."))}catch(err){const p=document.createElement("p");p.className="name";p.textContent="Gagal memuat statistik: "+err.message;box.append(p)}}
+async function removeKey(slug,id){try{await api("/admin/api/groups/"+encodeURIComponent(slug)+"/keys/"+encodeURIComponent(id),{method:"DELETE"});load()}catch(err){alert(err.message)}}
+async function removeGroup(slug){try{await api("/admin/api/groups/"+encodeURIComponent(slug),{method:"DELETE"});load()}catch(err){alert(err.message)}}
+function showLogin(){sessionStorage.removeItem("xingchiAdminToken");token="";document.querySelector("#app").hidden=true;document.querySelector("#login").hidden=false}
+document.querySelector("#loginBtn").onclick=async()=>{token=tokenInput.value;sessionStorage.setItem("xingchiAdminToken",token);document.querySelector("#login").hidden=true;document.querySelector("#app").hidden=false;try{await load()}catch(e){showLogin();alert(e.message)}};
+document.querySelector("#groupForm").onsubmit=async e=>{e.preventDefault();const form=e.target;const btn=form.querySelector("button[type=submit]");const out=document.querySelector("#groupResult");const f=new FormData(form);btn.disabled=true;try{await api("/admin/api/groups",{method:"POST",body:JSON.stringify({slug:f.get("slug"),name:f.get("name"),protocol:f.get("protocol")})});out.textContent="Grup "+f.get("slug")+" dibuat.";form.reset();load()}catch(err){out.textContent=err.message}finally{btn.disabled=false}};
+document.querySelector("#keyForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const r=await api("/admin/api/groups/"+encodeURIComponent(f.get("slug"))+"/keys",{method:"POST",body:JSON.stringify({secret:f.get("secret"),label:f.get("label"),protocol:f.get("protocol")||undefined})});document.querySelector("#result").textContent=JSON.stringify(r,null,2);e.target.reset();load()}catch(err){document.querySelector("#result").textContent=err.message}};
+if(token){document.querySelector("#login").hidden=true;document.querySelector("#app").hidden=false;load().catch(e=>{showLogin();alert(e.message)})}
+</script></body></html>
